@@ -655,6 +655,11 @@ func (a *appender) AppendHistogram(_ storage.SeriesRef, _ labels.Labels, _ int64
 	return 0, nil
 }
 
+func (a *appender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t int64, ct int64) (storage.SeriesRef, error) {
+	// TODO: support created timestamp
+	return 0, nil
+}
+
 // Commit submits the collected samples and purges the batch.
 func (a *appender) Commit() error {
 	a.w.walMtx.RLock()

@@ -10,6 +10,7 @@ import (
 
 	gklog "github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -20,6 +21,35 @@ import (
 
 	ruler_config "github.com/grafana/loki/pkg/ruler/config"
 )
+
+// TODO: Instead of using the same metrics for all notifiers,
+// should we have separate metrics for each discovery.NewManager?
+var sdMetrics map[string]discovery.DiscovererMetrics
+
+func init() {
+	var err error
+	sdMetrics, err = discovery.CreateAndRegisterSDMetrics(prometheus.DefaultRegisterer)
+	if err != nil {
+		panic(err)
+	}
+}
+
+type NoopRegistry struct{}
+
+var _ prometheus.Registerer = NoopRegistry{}
+
+// MustRegister implements prometheus.Registerer.
+func (n NoopRegistry) MustRegister(...prometheus.Collector) {}
+
+// Register implements prometheus.Registerer.
+func (n NoopRegistry) Register(prometheus.Collector) error {
+	return nil
+}
+
+// Unregister implements prometheus.Registerer.
+func (n NoopRegistry) Unregister(prometheus.Collector) bool {
+	return true
+}
 
 // rulerNotifier bundles a notifier.Manager together with an associated
 // Alertmanager service discovery manager and handles the lifecycle
@@ -34,10 +64,11 @@ type rulerNotifier struct {
 
 func newRulerNotifier(o *notifier.Options, l gklog.Logger) *rulerNotifier {
 	sdCtx, sdCancel := context.WithCancel(context.Background())
+
 	return &rulerNotifier{
 		notifier:  notifier.NewManager(o, l),
 		sdCancel:  sdCancel,
-		sdManager: discovery.NewManager(sdCtx, l),
+		sdManager: discovery.NewManager(sdCtx, l, NoopRegistry{}, sdMetrics),
 		logger:    l,
 	}
 }

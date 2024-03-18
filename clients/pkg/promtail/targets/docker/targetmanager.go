@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery"
 
@@ -44,6 +45,17 @@ func NewTargetManager(
 	pushClient api.EntryHandler,
 	scrapeConfigs []scrapeconfig.Config,
 ) (*TargetManager, error) {
+	reg := metrics.reg
+	if reg == nil {
+		reg = prometheus.DefaultRegisterer
+	}
+
+	wrappedReg := prometheus.WrapRegistererWith(prometheus.Labels{"component": "docker_discovery"}, reg)
+	sdMetrics, err := discovery.CreateAndRegisterSDMetrics(wrappedReg)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	tm := &TargetManager{
 		metrics:    metrics,
@@ -51,7 +63,7 @@ func NewTargetManager(
 		cancel:     cancel,
 		done:       make(chan struct{}),
 		positions:  positions,
-		manager:    discovery.NewManager(ctx, log.With(logger, "component", "docker_discovery")),
+		manager:    discovery.NewManager(ctx, log.With(logger, "component", "docker_discovery"), wrappedReg, sdMetrics, discovery.Name("docker")),
 		pushClient: pushClient,
 		groups:     make(map[string]*targetGroup),
 	}
