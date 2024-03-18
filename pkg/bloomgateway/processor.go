@@ -94,8 +94,8 @@ func (p *processor) processBlocks(ctx context.Context, data []blockWithTasks) er
 		return err
 	}
 
-	// TODO(chaudum): What's a good cocurrency value?
-	return concurrency.ForEachJob(ctx, len(bqs), 10, func(ctx context.Context, i int) error {
+	// TODO(chaudum): What's a good concurrency value?
+	return concurrency.ForEachJob(ctx, len(bqs), 2, func(ctx context.Context, i int) error {
 		bq := bqs[i]
 		if bq == nil {
 			// TODO(chaudum): Add metric for skipped blocks
