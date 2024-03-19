@@ -3,7 +3,6 @@ package bloomshipper
 import (
 	"container/list"
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"sync"
@@ -11,12 +10,12 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/grafana/dskit/flagext"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/atomic"
 
+	"github.com/grafana/loki/pkg/storage/stores/shipper/bloomshipper/config"
 	"github.com/grafana/loki/pkg/util"
 	"github.com/grafana/loki/pkg/util/constants"
 )
@@ -90,7 +89,7 @@ var _ Cache = &BlocksCache{}
 
 // BlocksCache is an in-memory cache that manages block directories on the filesystem.
 type BlocksCache struct {
-	cfg     BlocksCacheConfig
+	cfg     config.BlocksCacheConfig
 	metrics *blocksCacheMetrics
 	logger  log.Logger
 
@@ -114,56 +113,11 @@ type Entry struct {
 	refCount *atomic.Int32
 }
 
-// BlocksCacheConfig represents in-process embedded cache config.
-type BlocksCacheConfig struct {
-	Enabled   bool          `yaml:"enabled,omitempty"`
-	SoftLimit flagext.Bytes `yaml:"soft_limit"`
-	HardLimit flagext.Bytes `yaml:"hard_limit"`
-	TTL       time.Duration `yaml:"ttl"`
-
-	// PurgeInterval tell how often should we remove keys that are expired.
-	// by default it takes `defaultPurgeInterval`
-	PurgeInterval time.Duration `yaml:"-"`
-}
-
-func (cfg *BlocksCacheConfig) RegisterFlagsWithPrefix(prefix, description string, f *flag.FlagSet) {
-	cfg.RegisterFlagsWithPrefixAndDefaults(prefix, description, f, time.Hour)
-}
-
-func (cfg *BlocksCacheConfig) RegisterFlagsWithPrefixAndDefaults(prefix, description string, f *flag.FlagSet, defaultTTL time.Duration) {
-	f.BoolVar(&cfg.Enabled, prefix+"enabled", false, description+"Whether blocks cache is enabled.")
-	f.Var(&cfg.SoftLimit, prefix+"soft-limit", description+"Soft limit of the cache in bytes. Exceeding this limit will trigger evictions of least recently used items in the background.")
-	_ = cfg.SoftLimit.Set("32GiB")
-	f.Var(&cfg.HardLimit, prefix+"hard-limit", description+"Hard limit of the cache in bytes. Exceeding this limit will block execution until soft limit is deceeded.")
-	_ = cfg.HardLimit.Set("64GiB")
-	f.DurationVar(&cfg.TTL, prefix+"ttl", defaultTTL, description+"The time to live for items in the cache before they get purged.")
-}
-
-func (cfg *BlocksCacheConfig) IsEnabled() bool {
-	return cfg.Enabled
-}
-
-func (cfg *BlocksCacheConfig) Validate() error {
-	if !cfg.Enabled {
-		return nil
-	}
-	if cfg.TTL == 0 {
-		return errors.New("blocks cache ttl must not be 0")
-	}
-	if cfg.SoftLimit == 0 {
-		return errors.New("blocks cache soft_limit must not be 0")
-	}
-	if cfg.SoftLimit > cfg.HardLimit {
-		return errors.New("blocks cache soft_limit must not be greater than hard_limit")
-	}
-	return nil
-}
-
 // NewFsBlocksCache returns a new initialised BlocksCache with the key and value of requested types.
 // To limit the memory allocated by items in the cache, it's necessary to pass cacheEntrySizeCalculator
 // that calculates the size of an entry in bytes.
 // Also, this constructor allows passing the callback that will be called for the entry whenever it is removed from the cache.
-func NewFsBlocksCache(cfg BlocksCacheConfig, reg prometheus.Registerer, logger log.Logger) *BlocksCache {
+func NewFsBlocksCache(cfg config.BlocksCacheConfig, reg prometheus.Registerer, logger log.Logger) *BlocksCache {
 	cache := &BlocksCache{
 		cfg:     cfg,
 		logger:  logger,
